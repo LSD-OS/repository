@@ -108,9 +108,11 @@ jobs:
                 pacman -Sy --noconfirm archlinux-keyring
                 # dinit / elogind-dinit não existem nos repos oficiais do Arch:
                 # adiciona o repo "system" da Artix (fonte dos pacotes dinit).
-                # mirror.artixlinux.org (master) não resolve no runner do GH:
-                # usa os mesmos mirrors do pacman.conf dos profiles.
-                printf "\n[artix-system]\nServer = https://mirrors.dotsrc.org/artix-linux/repos/system/os/x86_64\nServer = https://mirror.pascalpuffke.de/artix-linux/system/os/x86_64\nSigLevel = Never\n" >> /etc/pacman.conf
+                # A seção PRECISA se chamar "system" (o pacman pede o .db pelo
+                # nome da seção; no mirror o arquivo é system.db) e o mirror
+                # master (mirror.artixlinux.org) não resolve no runner do GH,
+                # por isso os mirrors do pacman.conf dos profiles.
+                printf "\n[system]\nServer = https://mirrors.dotsrc.org/artix-linux/repos/system/os/x86_64\nServer = https://mirror.pascalpuffke.de/artix-linux/system/os/x86_64\nSigLevel = Never\n" >> /etc/pacman.conf
                 pacman -Syyu --noconfirm base-devel sudo git
                 useradd -m builder
                 echo "builder ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/builder
