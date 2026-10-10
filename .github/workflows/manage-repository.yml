@@ -107,6 +107,8 @@ jobs:
             docker run --rm \
               -e PKG="$pkg" \
               -e NODEPS="${{ inputs.nodeps }}" \
+              -e RUNNER_UID="$(id -u)" \
+              -e RUNNER_GID="$(id -g)" \
               -v "$GITHUB_WORKSPACE/packages:/pkgbuild" \
               archlinux:latest bash -euc '
                 pacman-key --init
@@ -129,6 +131,10 @@ jobs:
                 # são metadados, verificados pelo pacstrap da ISO no alvo certo.
                 if [ "$NODEPS" = "true" ]; then MPFLAGS="-d"; else MPFLAGS="-s"; fi
                 su builder -c "cd \"/pkgbuild/$PKG\" && makepkg $MPFLAGS --noconfirm --needed"
+                # devolve a posse ao usuário do runner: o chown para builder
+                # deixa o diretório do pacote sem permissão para o mv que roda
+                # fora do container (Permission denied no passo de mover o .zst)
+                chown -R "$RUNNER_UID:$RUNNER_GID" "/pkgbuild/$PKG"
               '
             echo "::endgroup::"
 
