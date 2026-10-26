@@ -187,25 +187,25 @@ jobs:
                 # Importa chave privada
                 echo "$GPG_PRIVATE_KEY" | gpg --batch --yes --import
                 
-                # Obter o Key ID importado
-                KEY_ID=$(gpg --list-secret-keys --with-colons | awk -F: '\''/^sec/{print $5}'\'' | head -n1)
+                # Obter o fingerprint importado
+                FPR=$(gpg --list-secret-keys --with-colons | awk -F: '\''$1=="fpr"{print $10; exit}'\'')
                 
                 # Definir confiança máxima na chave para pacman/repo-add
-                echo "${KEY_ID}:6:" | gpg --import-ownertrust
+                echo "${FPR}:6:" | gpg --import-ownertrust
 
                 # Assina cada pacote (.pkg.tar.zst -> .pkg.tar.zst.sig)
                 for pkg in $NEW_PKGS_ALL; do
                   echo "==> Assinando pacote: $pkg"
                   rm -f "${pkg}.sig"
                   if [ -n "$GPG_PASSPHRASE" ]; then
-                    gpg --batch --yes --pinentry-mode loopback --passphrase "$GPG_PASSPHRASE" --detach-sign --use-agent -u "$KEY_ID" "$pkg"
+                    gpg --batch --yes --pinentry-mode loopback --passphrase "$GPG_PASSPHRASE" --detach-sign --use-agent -u "$FPR" "$pkg"
                   else
-                    gpg --batch --yes --detach-sign --use-agent -u "$KEY_ID" "$pkg"
+                    gpg --batch --yes --detach-sign --use-agent -u "$FPR" "$pkg"
                   fi
                 done
 
                 # Habilita assinatura do banco de dados (gera .db.sig e .files.sig)
-                REPO_ADD_ARGS+=("--sign")
+                REPO_ADD_ARGS+=("--sign" "--key" "$FPR")
                 if [ -n "$GPG_PASSPHRASE" ]; then
                   # repo-add usa gpg diretamente, exportamos flags se necessário
                   export GPG_PASSPHRASE
