@@ -161,17 +161,61 @@ jobs:
 
       - name: Criar/atualizar banco do repositório (repo-add)
         if: inputs.action == 'build'
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
         run: |
           docker run --rm \
             -e ARCH="$ARCH" \
             -e DB_NAME="$DB_NAME" \
             -e NEW_PKGS_ALL="$NEW_PKGS_ALL" \
+            -e GPG_PRIVATE_KEY="$GPG_PRIVATE_KEY" \
+            -e GPG_PASSPHRASE="$GPG_PASSPHRASE" \
             -v "$GITHUB_WORKSPACE/repository:/repository" \
             archlinux:latest bash -euc '
               cd "/repository/$ARCH"
+              
+              REPO_ADD_ARGS=("--remove")
+
+              if [ -n "$GPG_PRIVATE_KEY" ]; then
+                echo "==> Configurando chave GPG para assinatura de pacotes e banco..."
+                mkdir -p /root/.gnupg
+                chmod 700 /root/.gnupg
+                echo "allow-loopback-pinentry" > /root/.gnupg/gpg-agent.conf
+                echo "pinentry-mode loopback" > /root/.gnupg/gpg.conf
+                
+                # Importa chave privada
+                echo "$GPG_PRIVATE_KEY" | gpg --batch --yes --import
+                
+                # Obter o Key ID importado
+                KEY_ID=$(gpg --list-secret-keys --with-colons | awk -F: '\''/^sec/{print $5}'\'' | head -n1)
+                
+                # Definir confiança máxima na chave para pacman/repo-add
+                echo "${KEY_ID}:6:" | gpg --import-ownertrust
+
+                # Assina cada pacote (.pkg.tar.zst -> .pkg.tar.zst.sig)
+                for pkg in $NEW_PKGS_ALL; do
+                  echo "==> Assinando pacote: $pkg"
+                  rm -f "${pkg}.sig"
+                  if [ -n "$GPG_PASSPHRASE" ]; then
+                    gpg --batch --yes --pinentry-mode loopback --passphrase "$GPG_PASSPHRASE" --detach-sign --use-agent -u "$KEY_ID" "$pkg"
+                  else
+                    gpg --batch --yes --detach-sign --use-agent -u "$KEY_ID" "$pkg"
+                  fi
+                done
+
+                # Habilita assinatura do banco de dados (gera .db.sig e .files.sig)
+                REPO_ADD_ARGS+=("--sign")
+                if [ -n "$GPG_PASSPHRASE" ]; then
+                  # repo-add usa gpg diretamente, exportamos flags se necessário
+                  export GPG_PASSPHRASE
+                fi
+              else
+                echo "::warning::GPG_PRIVATE_KEY não definida nos Secrets do repositório. O pacote foi publicado sem assinatura."
+              fi
+
               # --remove: apaga do disco o arquivo antigo ao atualizar o pacote
-              # (funciona por sub-pacote em split packages)
-              repo-add --remove "$DB_NAME" $NEW_PKGS_ALL
+              repo-add "${REPO_ADD_ARGS[@]}" "$DB_NAME" $NEW_PKGS_ALL
             '
 
       # ---------------- REMOVE ----------------
@@ -205,19 +249,19 @@ jobs:
               repo-remove "$DB_NAME" $PKG_NAMES
             '
 
-          # apaga os arquivos dos pacotes removidos
+          # apaga os arquivos dos pacotes removidos e suas assinaturas
           cd "repository/${ARCH}"
           for pkg in $PKG_NAMES; do
-            rm -fv "${pkg}-"*.pkg.tar.zst
+            rm -fv "${pkg}-"*.pkg.tar.zst "${pkg}-"*.pkg.tar.zst.sig
           done
 
       # ---------------- PÓS-PROCESSAMENTO ----------------
       - name: Substituir symlinks por cópias reais
         if: inputs.action != 'list'
         run: |
-          # GitHub raw não serve symlinks: converte lsd.db / lsd.files em arquivos reais
+          # GitHub raw não serve symlinks: converte lsd.db / lsd.files (e suas assinaturas) em arquivos reais
           cd "repository/${ARCH}"
-          for link in lsd.db lsd.files; do
+          for link in lsd.db lsd.files lsd.db.sig lsd.files.sig; do
             if [ -L "$link" ]; then
               target=$(readlink "$link")
               rm "$link"
