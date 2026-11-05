@@ -17,7 +17,7 @@ on:
         type: string
         required: false
       nodeps:
-        description: "true = makepkg -d, pular dependências no build (pacotes arch=any só de arquivos de serviço; o container Arch/systemd não instala a stack dinit da Artix)"
+        description: "true = makepkg -d, pular dependências no build (pacotes arch=any só de arquivos de serviço; o container Arch/systemd não instala a stack openrc/dinit da Artix)"
         type: boolean
         default: false
 
@@ -113,8 +113,8 @@ jobs:
               archlinux:latest bash -euc '
                 pacman-key --init
                 pacman -Sy --noconfirm archlinux-keyring
-                # dinit / elogind-dinit não existem nos repos oficiais do Arch:
-                # adiciona o repo "system" da Artix (fonte dos pacotes dinit).
+                # openrc / dinit / elogind-openrc não existem nos repos oficiais do Arch:
+                # adiciona o repo "system" da Artix (fonte dos pacotes de init).
                 # A seção PRECISA se chamar "system" (o pacman pede o .db pelo
                 # nome da seção; no mirror o arquivo é system.db) e o mirror
                 # master da Artix não resolve no runner do GH, por isso os
@@ -125,8 +125,8 @@ jobs:
                 echo "builder ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/builder
                 chown -R builder:builder "/pkgbuild/$PKG"
                 # nodeps=true: makepkg -d. O container Arch é systemd e não
-                # aceita a stack dinit da Artix (libudev x systemd-libs, dinit
-                # x systemd-sysvcompat, dbus-dinit x dbus). Pacotes arch=any
+                # aceita a stack openrc/dinit da Artix (libudev x systemd-libs, openrc/dinit
+                # x systemd-sysvcompat, dbus-openrc x dbus). Pacotes arch=any
                 # que só instalam arquivos não precisam das depends no build —
                 # são metadados, verificados pelo pacstrap da ISO no alvo certo.
                 if [ "$NODEPS" = "true" ]; then MPFLAGS="-d"; else MPFLAGS="-s"; fi
