@@ -289,3 +289,30 @@ jobs:
           fi
           git commit -m "$msg"
           git push
+
+      # ---------------- UPLOAD SOURCEFORGE (FILES) ----------------
+      - name: Sincronizar com SourceForge Files
+        if: inputs.action != 'list'
+        env:
+          SF_SSH_KEY: ${{ secrets.SF_SSH_KEY }}
+          SF_USER: ${{ secrets.SF_USERNAME }}
+          SF_PROJECT: ${{ secrets.SF_PROJECT }}
+        run: |
+          if [ -z "$SF_SSH_KEY" ] || [ -z "$SF_USER" ] || [ -z "$SF_PROJECT" ]; then
+            echo "::warning::Secrets do SourceForge (SF_SSH_KEY, SF_USERNAME ou SF_PROJECT) não configurados. Pulando upload para o SourceForge."
+            exit 0
+          fi
+
+          echo "==> Configurando chave SSH para o SourceForge..."
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          echo "$SF_SSH_KEY" > ~/.ssh/sf_key
+          chmod 600 ~/.ssh/sf_key
+          ssh-keyscan -t rsa,ed25519 frs.sourceforge.net >> ~/.ssh/known_hosts 2>/dev/null
+
+          echo "==> Enviando repositório para o SourceForge via rsync..."
+          rsync -avz --delete -e "ssh -i ~/.ssh/sf_key" \
+            repository/${ARCH}/ \
+            ${SF_USER}@frs.sourceforge.net:/home/frs/project/${SF_PROJECT}/${ARCH}/
+
+          echo "✅ Sincronização com o SourceForge concluída com sucesso!"
